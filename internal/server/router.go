@@ -6,6 +6,7 @@ import (
 	"github.com/Fluorineheit/duwit-tracker-be/internal/config"
 	"github.com/Fluorineheit/duwit-tracker-be/internal/modules/categories"
 	"github.com/Fluorineheit/duwit-tracker-be/internal/modules/expenses"
+	"github.com/Fluorineheit/duwit-tracker-be/internal/modules/reports"
 	"github.com/Fluorineheit/duwit-tracker-be/internal/response"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -53,6 +54,11 @@ func NewRouter(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		expenseService := expenses.NewExpenseService(expenseRepo, cfg)
 		expenseHandler := expenses.NewExpenseHandler(expenseService)
 		expenseHandler.RegisterRoutes(api.Group("/expenses"))
+
+		reportRepo := reports.NewReportRepository(db)
+		reportService := reports.NewReportService(reportRepo, cfg)
+		reportHandler := reports.NewReportHandler(reportService)
+		reportHandler.RegisterRoutes(api.Group("/reports"))
 	}
 
 	return router
