@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Fluorineheit/duwit-tracker-be/internal/config"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -24,6 +25,8 @@ func NewPostgresPool(ctx context.Context, cfg config.Config) (*pgxpool.Pool, err
 	poolConfig.MaxConnLifetime = 1 * time.Hour
 	poolConfig.MaxConnIdleTime = 30 * time.Minute
 	poolConfig.HealthCheckPeriod = 1 * time.Minute
+	poolConfig.ConnConfig.StatementCacheCapacity = 0
+	poolConfig.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {

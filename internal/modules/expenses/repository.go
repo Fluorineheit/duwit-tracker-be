@@ -2,12 +2,12 @@ package expenses
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/Fluorineheit/duwit-tracker-be/internal/pagination"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -76,7 +76,7 @@ func (r *ExpenseRepository) Create(ctx context.Context, input CreateExpenseInput
 	))
 }
 
-func (r *ExpenseRepository) FindAll(ctx context.Context, params ListExpensesParams) ([]Expense, int64, error) {
+func (r *ExpenseRepository) FindAll(ctx context.Context, params ListExpensesParams) ([]Expense, *string, bool, error) {
 	args := []any{params.UserID}
 	whereClauses := []string{
 		"e.user_id = $1",
@@ -103,36 +103,34 @@ func (r *ExpenseRepository) FindAll(ctx context.Context, params ListExpensesPara
 		whereClauses = append(whereClauses, fmt.Sprintf("(e.note ilike $%d or e.raw_text ilike $%d)", len(args), len(args)))
 	}
 
-	whereSQL := strings.Join(whereClauses, " and ")
+	if params.Cursor != nil {
+		cursorSpentAt, cursorID, err := decodeExpenseCursor(*params.Cursor)
+		if err != nil {
+			return nil, nil, false, err
+		}
 
-	countQuery := fmt.Sprintf(`
-		select count(*)
-		from expenses e
-		left join categories c on c.id = e.category_id
-		where %s
-	`, whereSQL)
-
-	var total int64
-	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
-		return nil, 0, err
+		args = append(args, cursorSpentAt, cursorID)
+		whereClauses = append(whereClauses, fmt.Sprintf("(e.spent_at, e.id) < ($%d::timestamptz, $%d::uuid)", len(args)-1, len(args)))
 	}
 
-	args = append(args, params.Limit, params.Offset)
-	limitIndex := len(args) - 1
-	offsetIndex := len(args)
+	whereSQL := strings.Join(whereClauses, " and ")
+
+	// Fetch one extra row to detect whether another page exists.
+	args = append(args, params.Limit+1)
+	limitIndex := len(args)
 
 	query := fmt.Sprintf(`
 		select %s
 		from expenses e
 		left join categories c on c.id = e.category_id
 		where %s
-		order by e.spent_at desc, e.created_at desc
-		limit $%d offset $%d
-	`, expenseSelectColumns("e"), whereSQL, limitIndex, offsetIndex)
+		order by e.spent_at desc, e.id desc
+		limit $%d
+	`, expenseSelectColumns("e"), whereSQL, limitIndex)
 
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, false, err
 	}
 	defer rows.Close()
 
@@ -141,17 +139,43 @@ func (r *ExpenseRepository) FindAll(ctx context.Context, params ListExpensesPara
 	for rows.Next() {
 		expense, err := scanExpense(rows)
 		if err != nil {
-			return nil, 0, err
+			return nil, nil, false, err
 		}
 
 		items = append(items, *expense)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, 0, err
+		return nil, nil, false, err
 	}
 
-	return items, total, nil
+	hasMore := len(items) > params.Limit
+	if hasMore {
+		items = items[:params.Limit]
+	}
+
+	var nextCursor *string
+	if hasMore && len(items) > 0 {
+		last := items[len(items)-1]
+		encoded := pagination.EncodeCursor(last.SpentAt.Format(time.RFC3339Nano), last.ID)
+		nextCursor = &encoded
+	}
+
+	return items, nextCursor, hasMore, nil
+}
+
+// decodeExpenseCursor parses a cursor into its (spent_at, id) keyset values.
+func decodeExpenseCursor(raw string) (string, string, error) {
+	parts, err := pagination.DecodeCursor(raw)
+	if err != nil {
+		return "", "", err
+	}
+
+	if len(parts) != 2 {
+		return "", "", pagination.ErrInvalidCursor
+	}
+
+	return parts[0], parts[1], nil
 }
 
 func (r *ExpenseRepository) FindByID(ctx context.Context, userID string, id string) (*Expense, error) {
@@ -339,22 +363,3 @@ func stringPtr(value string) *string {
 	return &trimmed
 }
 
-func timeToRFC3339Ptr(value *time.Time) *string {
-	if value == nil {
-		return nil
-	}
-
-	formatted := value.Format(time.RFC3339)
-	return &formatted
-}
-
-func sqlNullString(value *string) sql.NullString {
-	if value == nil {
-		return sql.NullString{}
-	}
-
-	return sql.NullString{
-		String: *value,
-		Valid:  true,
-	}
-}

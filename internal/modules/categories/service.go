@@ -22,7 +22,7 @@ func NewCategoryService(repo *CategoryRepository, cfg config.Config) *CategorySe
 	}
 }
 
-func (s *CategoryService) FindAll(ctx context.Context, query ListCategoriesQuery) ([]CategoryResponse, error) {
+func (s *CategoryService) FindAll(ctx context.Context, query ListCategoriesQuery) (*ListCategoriesResult, error) {
 	userID, err := s.getCurrentUserID(ctx)
 	if err != nil {
 		return nil, err
@@ -33,7 +33,26 @@ func (s *CategoryService) FindAll(ctx context.Context, query ListCategoriesQuery
 		return nil, err
 	}
 
-	items, err := s.repo.FindAll(ctx, userID, categoryType)
+	limit := query.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+
+	if limit > 100 {
+		limit = 100
+	}
+
+	var cursor *string
+	if trimmed := strings.TrimSpace(query.Cursor); trimmed != "" {
+		cursor = &trimmed
+	}
+
+	items, nextCursor, hasMore, err := s.repo.FindAll(ctx, ListCategoriesParams{
+		UserID: userID,
+		Type:   categoryType,
+		Limit:  limit,
+		Cursor: cursor,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +62,12 @@ func (s *CategoryService) FindAll(ctx context.Context, query ListCategoriesQuery
 		responses = append(responses, item.ToResponse())
 	}
 
-	return responses, nil
+	return &ListCategoriesResult{
+		Items:      responses,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+		Limit:      limit,
+	}, nil
 }
 
 func (s *CategoryService) FindByID(ctx context.Context, id string) (*CategoryResponse, error) {

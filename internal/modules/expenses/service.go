@@ -82,9 +82,9 @@ func (s *ExpenseService) FindAll(ctx context.Context, query ListExpensesQuery) (
 		limit = 100
 	}
 
-	offset := query.Offset
-	if offset < 0 {
-		offset = 0
+	var cursor *string
+	if trimmed := strings.TrimSpace(query.Cursor); trimmed != "" {
+		cursor = &trimmed
 	}
 
 	categoryID, err := normalizeOptionalUUID(query.CategoryID)
@@ -102,10 +102,10 @@ func (s *ExpenseService) FindAll(ctx context.Context, query ListExpensesQuery) (
 		return nil, fmt.Errorf("invalid to date")
 	}
 
-	items, total, err := s.repo.FindAll(ctx, ListExpensesParams{
+	items, nextCursor, hasMore, err := s.repo.FindAll(ctx, ListExpensesParams{
 		UserID:     userID,
 		Limit:      limit,
-		Offset:     offset,
+		Cursor:     cursor,
 		CategoryID: categoryID,
 		From:       from,
 		To:         to,
@@ -121,10 +121,10 @@ func (s *ExpenseService) FindAll(ctx context.Context, query ListExpensesQuery) (
 	}
 
 	return &ListExpensesResult{
-		Items:  responses,
-		Total:  total,
-		Limit:  limit,
-		Offset: offset,
+		Items:      responses,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+		Limit:      limit,
 	}, nil
 }
 

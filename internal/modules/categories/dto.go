@@ -27,7 +27,23 @@ type CategoryResponse struct {
 }
 
 type ListCategoriesQuery struct {
-	Type string
+	Type   string
+	Limit  int
+	Cursor string
+}
+
+type ListCategoriesParams struct {
+	UserID string
+	Type   string
+	Limit  int
+	Cursor *string
+}
+
+type ListCategoriesResult struct {
+	Items      []CategoryResponse `json:"items"`
+	NextCursor *string            `json:"next_cursor"`
+	HasMore    bool               `json:"has_more"`
+	Limit      int                `json:"limit"`
 }
 
 type CreateCategoryInput struct {

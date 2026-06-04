@@ -46,11 +46,10 @@ func (h *ExpenseHandler) Create(c *gin.Context) {
 
 func (h *ExpenseHandler) FindAll(c *gin.Context) {
 	limit := parseIntQuery(c, "limit", 20)
-	offset := parseIntQuery(c, "offset", 0)
 
 	result, err := h.service.FindAll(c.Request.Context(), ListExpensesQuery{
 		Limit:      limit,
-		Offset:     offset,
+		Cursor:     c.Query("cursor"),
 		CategoryID: c.Query("category_id"),
 		From:       c.Query("from"),
 		To:         c.Query("to"),

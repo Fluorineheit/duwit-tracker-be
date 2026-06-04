@@ -3,6 +3,7 @@ package categories
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/Fluorineheit/duwit-tracker-be/internal/response"
 	"github.com/gin-gonic/gin"
@@ -27,15 +28,17 @@ func (h *CategoryHandler) RegisterRoutes(router *gin.RouterGroup) {
 }
 
 func (h *CategoryHandler) FindAll(c *gin.Context) {
-	categories, err := h.service.FindAll(c.Request.Context(), ListCategoriesQuery{
-		Type: c.Query("type"),
+	result, err := h.service.FindAll(c.Request.Context(), ListCategoriesQuery{
+		Type:   c.Query("type"),
+		Limit:  parseIntQuery(c, "limit", 20),
+		Cursor: c.Query("cursor"),
 	})
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	response.Success(c, http.StatusOK, "Categories retrieved successfully", categories)
+	response.Success(c, http.StatusOK, "Categories retrieved successfully", result)
 }
 
 func (h *CategoryHandler) FindByID(c *gin.Context) {
@@ -94,6 +97,20 @@ func (h *CategoryHandler) SoftDelete(c *gin.Context) {
 	}
 
 	response.Success(c, http.StatusOK, "Category deleted successfully", nil)
+}
+
+func parseIntQuery(c *gin.Context, key string, fallback int) int {
+	value := c.Query(key)
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+
+	return parsed
 }
 
 func handleCategoryError(c *gin.Context, err error) {

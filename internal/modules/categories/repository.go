@@ -2,11 +2,11 @@ package categories
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/Fluorineheit/duwit-tracker-be/internal/pagination"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -41,28 +41,49 @@ func (r *CategoryRepository) GetUserIDByEmail(ctx context.Context, email string)
 	return userID, nil
 }
 
-func (r *CategoryRepository) FindAll(ctx context.Context, userID string, categoryType string) ([]Category, error) {
-	args := []any{userID}
+func (r *CategoryRepository) FindAll(ctx context.Context, params ListCategoriesParams) ([]Category, *string, bool, error) {
+	args := []any{params.UserID}
 	whereClauses := []string{
 		"user_id = $1::uuid",
 		"deleted_at is null",
 	}
 
-	if strings.TrimSpace(categoryType) != "" {
-		args = append(args, strings.TrimSpace(categoryType))
+	if strings.TrimSpace(params.Type) != "" {
+		args = append(args, strings.TrimSpace(params.Type))
 		whereClauses = append(whereClauses, fmt.Sprintf("type = $%d", len(args)))
 	}
+
+	if params.Cursor != nil {
+		cursorIsDefault, cursorName, cursorID, err := decodeCategoryCursor(*params.Cursor)
+		if err != nil {
+			return nil, nil, false, err
+		}
+
+		args = append(args, cursorIsDefault, cursorName, cursorID)
+		isDefaultIndex := len(args) - 2
+		nameIndex := len(args) - 1
+		idIndex := len(args)
+		whereClauses = append(whereClauses, fmt.Sprintf(
+			"(is_default < $%d or (is_default = $%d and (name, id) > ($%d::text, $%d::uuid)))",
+			isDefaultIndex, isDefaultIndex, nameIndex, idIndex,
+		))
+	}
+
+	// Fetch one extra row to detect whether another page exists.
+	args = append(args, params.Limit+1)
+	limitIndex := len(args)
 
 	query := fmt.Sprintf(`
 		select %s
 		from categories
 		where %s
-		order by is_default desc, name asc
-	`, categorySelectColumns(), strings.Join(whereClauses, " and "))
+		order by is_default desc, name asc, id asc
+		limit $%d
+	`, categorySelectColumns(), strings.Join(whereClauses, " and "), limitIndex)
 
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, nil, false, err
 	}
 	defer rows.Close()
 
@@ -71,17 +92,51 @@ func (r *CategoryRepository) FindAll(ctx context.Context, userID string, categor
 	for rows.Next() {
 		category, err := scanCategory(rows)
 		if err != nil {
-			return nil, err
+			return nil, nil, false, err
 		}
 
 		items = append(items, *category)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, nil, false, err
 	}
 
-	return items, nil
+	hasMore := len(items) > params.Limit
+	if hasMore {
+		items = items[:params.Limit]
+	}
+
+	var nextCursor *string
+	if hasMore && len(items) > 0 {
+		last := items[len(items)-1]
+		encoded := pagination.EncodeCursor(boolToCursorString(last.IsDefault), last.Name, last.ID)
+		nextCursor = &encoded
+	}
+
+	return items, nextCursor, hasMore, nil
+}
+
+// decodeCategoryCursor parses a cursor into its (is_default, name, id) keyset values.
+func decodeCategoryCursor(raw string) (bool, string, string, error) {
+	parts, err := pagination.DecodeCursor(raw)
+	if err != nil {
+		return false, "", "", err
+	}
+
+	if len(parts) != 3 {
+		return false, "", "", pagination.ErrInvalidCursor
+	}
+
+	return parts[0] == "t", parts[1], parts[2], nil
+}
+
+func boolToCursorString(value bool) string {
+	if value {
+		return "t"
+	}
+
+	return "f"
 }
 
 func (r *CategoryRepository) FindByID(ctx context.Context, userID string, id string) (*Category, error) {
@@ -323,15 +378,4 @@ func nullableStringArg(value *string) any {
 	}
 
 	return trimmed
-}
-
-func sqlNullString(value *string) sql.NullString {
-	if value == nil {
-		return sql.NullString{}
-	}
-
-	return sql.NullString{
-		String: *value,
-		Valid:  true,
-	}
 }

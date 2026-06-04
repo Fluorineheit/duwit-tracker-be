@@ -87,6 +87,14 @@ psql "postgresql://user:password@host:5432/database" -f migrations/001_init_sche
 
 ### 4. Start the API
 
+For local development on Windows, use the dev launcher. It stops an old Go-built API process on the configured port before starting a fresh server:
+
+```powershell
+.\scripts\dev.ps1
+```
+
+You can also run the API directly:
+
 ```powershell
 go run ./cmd/api
 ```
@@ -114,6 +122,7 @@ GET /api/v1/health/database
 ```http
 GET    /api/v1/categories
 GET    /api/v1/categories?type=expense
+GET    /api/v1/categories?limit=20&cursor=<next_cursor>
 GET    /api/v1/categories/:id
 POST   /api/v1/categories
 PUT    /api/v1/categories/:id
@@ -137,7 +146,7 @@ Category type defaults to `expense` and must be either `expense` or `income`.
 
 ```http
 GET    /api/v1/expenses
-GET    /api/v1/expenses?limit=20&offset=0
+GET    /api/v1/expenses?limit=20&cursor=<next_cursor>
 GET    /api/v1/expenses?category_id=<uuid>&from=2026-06-01&to=2026-06-30&search=coffee
 GET    /api/v1/expenses/:id
 POST   /api/v1/expenses
@@ -165,7 +174,12 @@ Expense notes:
 - `currency` defaults to `IDR`.
 - `source` defaults to `manual` and must be one of `manual`, `telegram`, `import`, or `ai`.
 - `spent_at` accepts `YYYY-MM-DD` or RFC3339. If omitted, it defaults to the current time.
+
+List endpoints (`GET /categories`, `GET /expenses`) use cursor (keyset) pagination:
+
 - `limit` defaults to `20` and is capped at `100`.
+- `cursor` is an opaque token; omit it for the first page.
+- The response `data` contains `items`, `has_more`, and `next_cursor` (the value to pass as `cursor` for the next page; `null` when there are no more pages).
 
 ## Response Format
 
@@ -211,6 +225,14 @@ Stop-Process -Id <PID>
 ```
 
 Or change `APP_PORT` in `.env` to another port, such as `8081`.
+
+For local development, prefer:
+
+```powershell
+.\scripts\dev.ps1
+```
+
+The script reads `APP_PORT` from `.env`, stops an old `api.exe` created by `go run`, and then starts the API again.
 
 ### Database connection failed
 

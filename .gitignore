@@ -2,3 +2,5 @@
 .exe
 tmp/
 vendor/
+.gocache/
+*.go.[0-9]*

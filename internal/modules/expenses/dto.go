@@ -38,7 +38,7 @@ type ExpenseResponse struct {
 
 type ListExpensesQuery struct {
 	Limit      int
-	Offset     int
+	Cursor     string
 	CategoryID string
 	From       string
 	To         string
@@ -48,7 +48,7 @@ type ListExpensesQuery struct {
 type ListExpensesParams struct {
 	UserID     string
 	Limit      int
-	Offset     int
+	Cursor     *string
 	CategoryID *string
 	From       *string
 	To         *string
@@ -56,10 +56,10 @@ type ListExpensesParams struct {
 }
 
 type ListExpensesResult struct {
-	Items []ExpenseResponse `json:"items"`
-	Total int64             `json:"total"`
-	Limit int               `json:"limit"`
-	Offset int              `json:"offset"`
+	Items      []ExpenseResponse `json:"items"`
+	NextCursor *string           `json:"next_cursor"`
+	HasMore    bool              `json:"has_more"`
+	Limit      int               `json:"limit"`
 }
 
 type CreateExpenseInput struct {
