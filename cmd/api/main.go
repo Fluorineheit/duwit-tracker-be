@@ -37,7 +37,7 @@ func main() {
 
 	router := server.NewRouter(cfg, db)
 
-	listener, address, err := listen(ctx, cfg.AppEnv, cfg.AppPort)
+	listener, address, err := listen(ctx, cfg.AppEnv, cfg.AppHost, cfg.AppPort)
 	if err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
@@ -48,7 +48,7 @@ func main() {
 		Handler: router,
 	}
 
-	log.Printf("Starting %s on http://localhost%s", cfg.AppName, address)
+	log.Printf("Starting %s on %s", cfg.AppName, displayURL(address))
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -71,8 +71,8 @@ func main() {
 	}
 }
 
-func listen(ctx context.Context, appEnv string, appPort string) (net.Listener, string, error) {
-	address := ":" + appPort
+func listen(ctx context.Context, appEnv string, appHost string, appPort string) (net.Listener, string, error) {
+	address := buildAddress(appHost, appPort)
 	listenConfig := net.ListenConfig{}
 
 	listener, err := listenConfig.Listen(ctx, "tcp", address)
@@ -90,11 +90,11 @@ func listen(ctx context.Context, appEnv string, appPort string) (net.Listener, s
 	}
 
 	for nextPort := port + 1; nextPort <= port+20; nextPort++ {
-		nextAddress := ":" + strconv.Itoa(nextPort)
+		nextAddress := buildAddress(appHost, strconv.Itoa(nextPort))
 
 		listener, listenErr := listenConfig.Listen(ctx, "tcp", nextAddress)
 		if listenErr == nil {
-			log.Printf("Port %s is already in use. Falling back to http://localhost%s", appPort, nextAddress)
+			log.Printf("Port %s is already in use. Falling back to %s", appPort, displayURL(nextAddress))
 			return listener, nextAddress, nil
 		}
 
@@ -104,6 +104,30 @@ func listen(ctx context.Context, appEnv string, appPort string) (net.Listener, s
 	}
 
 	return nil, "", err
+}
+
+// buildAddress returns the TCP bind address. An empty host binds all interfaces.
+func buildAddress(host string, port string) string {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return ":" + port
+	}
+
+	return net.JoinHostPort(host, port)
+}
+
+// displayURL turns a bind address into a clickable http URL for logging.
+func displayURL(address string) string {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return "http://localhost" + address
+	}
+
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "localhost"
+	}
+
+	return "http://" + net.JoinHostPort(host, port)
 }
 
 func isAddressInUse(err error) bool {

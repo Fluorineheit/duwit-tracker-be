@@ -4,9 +4,11 @@ import (
 	"net/http"
 
 	"github.com/Fluorineheit/duwit-tracker-be/internal/config"
+	"github.com/Fluorineheit/duwit-tracker-be/internal/modules/budgets"
 	"github.com/Fluorineheit/duwit-tracker-be/internal/modules/categories"
 	"github.com/Fluorineheit/duwit-tracker-be/internal/modules/expenses"
 	"github.com/Fluorineheit/duwit-tracker-be/internal/modules/reports"
+	"github.com/Fluorineheit/duwit-tracker-be/internal/modules/subscriptions"
 	"github.com/Fluorineheit/duwit-tracker-be/internal/response"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -59,6 +61,16 @@ func NewRouter(cfg config.Config, db *pgxpool.Pool) *gin.Engine {
 		reportService := reports.NewReportService(reportRepo, cfg)
 		reportHandler := reports.NewReportHandler(reportService)
 		reportHandler.RegisterRoutes(api.Group("/reports"))
+
+		budgetRepo := budgets.NewBudgetRepository(db)
+		budgetService := budgets.NewBudgetService(budgetRepo, cfg)
+		budgetHandler := budgets.NewBudgetHandler(budgetService)
+		budgetHandler.RegisterRoutes(api.Group("/budgets"))
+
+		subscriptionRepo := subscriptions.NewSubscriptionRepository(db)
+		subscriptionService := subscriptions.NewSubscriptionService(subscriptionRepo, cfg)
+		subscriptionHandler := subscriptions.NewSubscriptionHandler(subscriptionService)
+		subscriptionHandler.RegisterRoutes(api.Group("/subscriptions"))
 	}
 
 	return router

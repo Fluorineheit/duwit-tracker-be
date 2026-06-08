@@ -8,6 +8,7 @@ import (
 type Config struct {
 	AppName string
 	AppEnv  string
+	AppHost string
 	AppPort string
 
 	AppUserEmail string
@@ -21,6 +22,9 @@ func Load() Config {
 	return Config{
 		AppName: getEnv("APP_NAME", "DuwitTrackerApp"),
 		AppEnv:  getEnv("APP_ENV", "development"),
+		// Empty host binds all interfaces (required by Render). Set APP_HOST=127.0.0.1
+		// locally to bind loopback only and avoid the Windows Firewall prompt.
+		AppHost: getEnv("APP_HOST", ""),
 		AppPort: getEnv("APP_PORT", "8080"),
 
 		AppUserEmail: getEnv("APP_USER_EMAIL", ""),
